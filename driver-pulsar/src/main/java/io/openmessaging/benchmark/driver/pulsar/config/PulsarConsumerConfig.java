@@ -13,11 +13,13 @@
  */
 package io.openmessaging.benchmark.driver.pulsar.config;
 
-
-import org.apache.pulsar.client.api.SubscriptionType;
-
 public class PulsarConsumerConfig {
 
     public int receiverQueueSize = 10000;
-    public SubscriptionType subscriptionType = SubscriptionType.Failover;
+    public String subscriptionName = "";
+
+    public String tags = "";
+    public int tagNum = 0;
+    public String subscriptionType = "";
+    public int ackDelayInMs = 0;
 }

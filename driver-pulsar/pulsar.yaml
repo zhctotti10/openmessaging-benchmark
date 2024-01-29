@@ -23,6 +23,8 @@ client:
   connectionsPerBroker: 8
   clusterName: local
   namespacePrefix: benchmark/ns
+  useMyTopic: true
+  topics: persistent://pulsar-xoxza3qnanq2/wemeet_rem/xxx,persistent://pulsar-xoxza3qnanq2/wemeet_rem/yyy
   topicType: persistent
   persistence:
     ensembleSize: 3
@@ -46,4 +48,5 @@ producer:
 
 consumer:
   receiverQueueSize: 10000
-  subscriptionType: Failover
+  ackDelayInMs: 0
+  subscriptionType: Shared

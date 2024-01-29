@@ -13,6 +13,9 @@
  */
 package io.openmessaging.benchmark.worker;
 
+import java.io.File;
+import java.io.IOException;
+import java.util.List;
 
 import io.openmessaging.benchmark.worker.commands.ConsumerAssignment;
 import io.openmessaging.benchmark.worker.commands.CountersStats;
@@ -20,9 +23,6 @@ import io.openmessaging.benchmark.worker.commands.CumulativeLatencies;
 import io.openmessaging.benchmark.worker.commands.PeriodStats;
 import io.openmessaging.benchmark.worker.commands.ProducerWorkAssignment;
 import io.openmessaging.benchmark.worker.commands.TopicsInfo;
-import java.io.File;
-import java.io.IOException;
-import java.util.List;
 
 public interface Worker extends AutoCloseable {
 
@@ -52,7 +52,5 @@ public interface Worker extends AutoCloseable {
 
     void resetStats() throws IOException;
 
-    void stopAll();
-
-    String id();
+    void stopAll() throws IOException;
 }

@@ -23,7 +23,7 @@
         serviceUrl: "pulsar://{{ hostvars[groups['pulsar'][0]].private_ip }}:6650/"
         httpUrl: "http://{{ hostvars[groups['pulsar'][0]].private_ip }}:8080/"
     - set_fact:
-        pulsar_version: "{{ pulsar_version | default('2.11.0') }}"
+        pulsar_version: "{{ pulsar_version | default('2.9.1') }}"
         node_exporter_version: "{{ node_exporter_version | default('1.2.2') }}"
         prometheus_version: "{{ prometheus_version | default('2.31.1') }}"
         disk_dev: "{{ disk_dev | default(['/dev/nvme1n1', '/dev/nvme2n1']) }}"
@@ -42,29 +42,6 @@
           src: "https://github.com/prometheus/prometheus/releases/download/v{{ prometheus_version }}/prometheus-{{ prometheus_version }}.linux-amd64.tar.gz"
           remote: yes
       when: prometheus_binary is not defined
-
-- name: Format and mount disks for Zookeeper hosts
-  hosts: zookeeper
-  connection: ssh
-  become: true
-  tasks:
-    - name: Format disks
-      filesystem:
-        fstype: xfs
-        dev: '{{ item }}'
-      with_items:
-        - "{{ disk_dev[0] }}"
-        - "{{ disk_dev[1] }}"
-    - name: Mount disks
-      mount:
-        path: "{{ item.path }}"
-        src: "{{ item.src }}"
-        fstype: xfs
-        opts: defaults,noatime,nodiscard
-        state: mounted
-      with_items:
-        - { path: "/mnt/zookeeper/logs", src: "{{ disk_dev[0] }}" }
-        - { path: "/mnt/zookeeper/data", src: "{{ disk_dev[1] }}" }
 
 - name: Format and mount disks for Pulsar/BookKeeper hosts
   hosts: pulsar
@@ -159,8 +136,8 @@
         state: latest
         pkg:
           - wget
-          - java-17-openjdk
-          - java-17-openjdk-devel
+          - java-11-openjdk
+          - java-11-openjdk-devel
           - sysstat
           - vim
           - chrony
@@ -174,42 +151,39 @@
         dest: /opt/pulsar
         extra_opts: ["--strip-components=1"]
     - set_fact:
-        max_heap_memory: "{{ pulsar_max_heap_memory | default('32g') }}"
-        max_direct_memory: "{{ pulsar_max_direct_memory | default('32g') }}"
+        max_heap_memory: "{{ pulsar_max_heap_memory | default('16g') }}"
+        max_direct_memory: "{{ pulsar_max_direct_memory | default('48g') }}"
     - template:
         src: "templates/pulsar_env.sh"
         dest: "/opt/pulsar/conf/pulsar_env.sh"
-    - template:
-        src: "templates/bkenv.sh"
-        dest: "/opt/pulsar/conf/bkenv.sh"
     - name: Change locale to en_US.utf-8
       shell: |
         echo 'LANG=en_US.utf-8
               LC_ALL=en_US.utf-8' > /etc/environment
 
-#- name: Protocol Handlers installation
-#  hosts: pulsar
-#  connection: ssh
-#  become: true
-#  tasks:
-#    - file: path=/opt/pulsar/protocols state=absent
-#    - file: path=/opt/pulsar/protocols state=directory
-#    - name: Upload local protocol handlers
-#      copy:
-#        src: "{{ item.local_path }}"
-#        dest: /opt/pulsar/protocols
-#      loop: "{{ protocol_handlers }}"
-#      when:
-#        - protocol_handlers is defined
-#        - item.local_path is defined
-#    - name: Download protocol handlers
-#      get_url:
-#        url: "{{ item.url }}"
-#        dest: /opt/pulsar/protocols
-#      loop: "{{ protocol_handlers }}"
-#      when:
-#        - protocol_handlers is defined
-#        - item.local_path is not defined
+- name: Protocol Handlers installation
+  hosts: pulsar
+  connection: ssh
+  become: true
+  tasks:
+    - file: path=/opt/pulsar/protocols state=absent
+    - file: path=/opt/pulsar/protocols state=directory
+    - name: Upload local protocol handlers
+      copy:
+        src: "{{ item.local_path }}"
+        dest: /opt/pulsar/protocols
+      loop: "{{ protocol_handlers }}"
+      when:
+        - protocol_handlers is defined
+        - item.local_path is defined
+    - name: Download protocol handlers
+      get_url:
+        url: "{{ item.url }}"
+        dest: /opt/pulsar/protocols
+      loop: "{{ protocol_handlers }}"
+      when:
+        - protocol_handlers is defined
+        - item.local_path is not defined
 
 - name: ZooKeeper setup
   hosts: zookeeper
@@ -218,8 +192,8 @@
   tasks:
     - set_fact:
         zid: "{{ groups['zookeeper'].index(inventory_hostname) }}"
-        max_heap_memory: "{{ zookeeper_max_heap_memory | default('32G') }}"
-        max_direct_memory: "{{ zookeeper_max_direct_memory | default('2G') }}"
+        max_heap_memory: "{{ zookeeper_max_heap_memory | default('512m') }}"
+        max_direct_memory: "{{ zookeeper_max_direct_memory | default('512m') }}"
     - file:
         path: "/opt/pulsar/{{ item }}"
         state: directory
@@ -233,7 +207,7 @@
         dest: "/opt/pulsar/conf/zookeeper.conf"
     - template:
         src: templates/myid
-        dest: "/mnt/zookeeper/data/myid"
+        dest: "/opt/pulsar/data/zookeeper/myid"
     - template:
         src: "templates/zookeeper.service"
         dest: "/etc/systemd/system/zookeeper.service"
@@ -241,21 +215,21 @@
         state: restarted
         daemon_reload: yes
         name: "zookeeper"
+    - command: >
+        bin/pulsar initialize-cluster-metadata --cluster local
+        --zookeeper localhost:2181
+        --configuration-store localhost:2181
+        --web-service-url {{ httpUrl }}
+        --broker-service-url {{ serviceUrl }}
+      args:
+        chdir: /opt/pulsar
+      when: groups['zookeeper'][0] == inventory_hostname
 
 - name: BookKeeper setup
   hosts: pulsar
   connection: ssh
   become: true
   tasks:
-    - command: >
-        bin/pulsar initialize-cluster-metadata --cluster local
-        --zookeeper {{ hostvars[groups['zookeeper'][0]].private_ip }}:2181
-        --configuration-store {{ hostvars[groups['zookeeper'][0]].private_ip }}:2181
-        --web-service-url {{ httpUrl }}
-        --broker-service-url {{ serviceUrl }}
-      args:
-        chdir: /opt/pulsar
-      when: groups['pulsar'][0] == inventory_hostname
     - set_fact:
         skip_journal: "{{ skip_journal | default(false) }}"
     - name: Apply BookKeeper configuration file [Bypass Journal]
@@ -289,32 +263,32 @@
     - template:
         src: "templates/pulsar.service"
         dest: "/etc/systemd/system/pulsar.service"
-#    - template:
-#        src: "templates/{{ item.conf }}"
-#        dest: "/opt/pulsar/conf/{{ item.conf }}"
-#      loop: "{{ protocol_handlers }}"
-#      when: protocol_handlers is defined
-#    - set_fact:
-#        protocols: "{{ protocols | default([]) + [ item.protocol ]}}"
-#      loop: "{{ protocol_handlers }}"
-#      when: protocol_handlers is defined
-#    - name: Enable protocol handlers
-#      lineinfile:
-#        path: /opt/pulsar/conf/broker.conf
-#        line: "messagingProtocols={{ protocols | join(',') }}"
-#      when: protocols is defined
-#    - name: Read configurations of all protocol handlers
-#      shell: |
-#        grep -v "^#" "{{ '/opt/pulsar/conf/' + item.conf }}"
-#      loop: "{{ protocol_handlers }}"
-#      when: protocol_handlers is defined
-#      register: conf_files
-#    - name: Update broker.conf for protocol handlers
-#      lineinfile:
-#        path: /opt/pulsar/conf/broker.conf
-#        line: "{{ item.stdout_lines | join('\n') }}"
-#      loop: "{{ conf_files.results }}"
-#      when: conf_files is defined
+    - template:
+        src: "templates/{{ item.conf }}"
+        dest: "/opt/pulsar/conf/{{ item.conf }}"
+      loop: "{{ protocol_handlers }}"
+      when: protocol_handlers is defined
+    - set_fact:
+        protocols: "{{ protocols | default([]) + [ item.protocol ]}}"
+      loop: "{{ protocol_handlers }}"
+      when: protocol_handlers is defined
+    - name: Enable protocol handlers
+      lineinfile:
+        path: /opt/pulsar/conf/broker.conf
+        line: "messagingProtocols={{ protocols | join(',') }}"
+      when: protocols is defined
+    - name: Read configurations of all protocol handlers
+      shell: |
+        grep -v "^#" "{{ '/opt/pulsar/conf/' + item.conf }}"
+      loop: "{{ protocol_handlers }}"
+      when: protocol_handlers is defined
+      register: conf_files
+    - name: Update broker.conf for protocol handlers
+      lineinfile:
+        path: /opt/pulsar/conf/broker.conf
+        line: "{{ item.stdout_lines | join('\n') }}"
+      loop: "{{ conf_files.results }}"
+      when: conf_files is defined
     - systemd:
         state: restarted
         daemon_reload: yes
@@ -416,12 +390,12 @@
       lineinfile:
          dest: /opt/benchmark/bin/benchmark-worker
          regexp: '^JVM_MEM='
-         line: 'JVM_MEM="-Xms64G -Xmx64G -XX:+UseZGC"'
+         line: 'JVM_MEM="-Xms100G -Xmx100G -XX:+UnlockExperimentalVMOptions -XX:+UseZGC -XX:+ParallelRefProcEnabled -XX:+AggressiveOpts -XX:+DoEscapeAnalysis -XX:ParallelGCThreads=12 -XX:ConcGCThreads=12 -XX:+DisableExplicitGC -XX:-ResizePLAB"'
     - name: Configure memory
       lineinfile:
          dest: /opt/benchmark/bin/benchmark
          regexp: '^JVM_MEM='
-         line: 'JVM_MEM="-Xmx16G"'
+         line: 'JVM_MEM="-Xmx4G"'
     - name: Install benchmark systemd service
       template:
         src: "templates/benchmark-worker.service"

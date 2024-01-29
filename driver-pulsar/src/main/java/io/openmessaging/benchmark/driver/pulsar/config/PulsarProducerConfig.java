@@ -19,4 +19,11 @@ public class PulsarProducerConfig {
     public int batchingMaxBytes = 1024 * 1024;
     public boolean blockIfQueueFull = true;
     public int pendingQueueSize = 0;
+
+    public String tags = "";
+    public int tagNum = 0;
+
+    public String delayTimes = "";
+    public String keys = "";
+    public int keyNum = 0;
 }

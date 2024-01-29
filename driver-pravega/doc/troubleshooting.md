@@ -13,4 +13,3 @@ journalctl -u pravega-segmentstore
 ```
 export TF_STATE=./
 ```
-

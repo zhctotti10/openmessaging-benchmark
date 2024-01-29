@@ -13,22 +13,34 @@
  */
 package io.openmessaging.benchmark.driver.rocketmq;
 
-
-import io.openmessaging.benchmark.driver.BenchmarkProducer;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
-import org.apache.rocketmq.client.producer.MQProducer;
+
+import org.apache.rocketmq.client.producer.DefaultMQProducer;
 import org.apache.rocketmq.client.producer.SendCallback;
 import org.apache.rocketmq.client.producer.SendResult;
 import org.apache.rocketmq.common.message.Message;
 
-public class RocketMQBenchmarkProducer implements BenchmarkProducer {
-    private final MQProducer rmqProducer;
-    private final String rmqTopic;
+import io.openmessaging.benchmark.driver.BenchmarkProducer;
 
-    public RocketMQBenchmarkProducer(final MQProducer rmqProducer, final String rmqTopic) {
+public class RocketMQBenchmarkProducer implements BenchmarkProducer {
+    private final DefaultMQProducer rmqProducer;
+    private final String rmqTopic;
+    private final Boolean sendDelayMsg;
+    private final Long delayTimeInSec;
+
+    public RocketMQBenchmarkProducer(final DefaultMQProducer rmqProducer, final String rmqTopic) {
         this.rmqProducer = rmqProducer;
         this.rmqTopic = rmqTopic;
+        this.sendDelayMsg = false;
+        this.delayTimeInSec = 0L;
+    }
+
+    public RocketMQBenchmarkProducer(final DefaultMQProducer rmqProducer, final String rmqTopic, Boolean sendDelayMsg, Long delayTimeInSec) {
+        this.rmqProducer = rmqProducer;
+        this.rmqTopic = rmqTopic;
+        this.sendDelayMsg = sendDelayMsg;
+        this.delayTimeInSec = delayTimeInSec;
     }
 
     @Override
@@ -38,21 +50,26 @@ public class RocketMQBenchmarkProducer implements BenchmarkProducer {
             message.setKeys(key.get());
         }
 
+        if(this.sendDelayMsg){
+            // 延时消息，单位秒（s），在指定延迟时间（当前时间之后）进行投递，例如消息在10秒后投递。
+            long delayTime = System.currentTimeMillis() + this.delayTimeInSec * 1000;
+            // 设置消息需要被投递的时间。
+            message.putUserProperty("__STARTDELIVERTIME", String.valueOf(delayTime));
+        }
+
         CompletableFuture<Void> future = new CompletableFuture<>();
         try {
-            this.rmqProducer.send(
-                    message,
-                    new SendCallback() {
-                        @Override
-                        public void onSuccess(final SendResult sendResult) {
-                            future.complete(null);
-                        }
+            this.rmqProducer.send(message, new SendCallback() {
+                @Override
+                public void onSuccess(final SendResult sendResult) {
+                    future.complete(null);
+                }
 
-                        @Override
-                        public void onException(final Throwable e) {
-                            future.completeExceptionally(e);
-                        }
-                    });
+                @Override
+                public void onException(final Throwable e) {
+                    future.completeExceptionally(e);
+                }
+            });
         } catch (Exception e) {
             future.completeExceptionally(e);
         }

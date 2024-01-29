@@ -1,5 +1,7 @@
 [Unit]
 Description=Pulsar Dashboard
+After=docker.service
+Requires=docker.service
 After=prometheus.service
 Requires=prometheus.service
  

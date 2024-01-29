@@ -17,4 +17,5 @@ public class DriverConfiguration {
     public String name;
 
     public String driverClass;
+
 }

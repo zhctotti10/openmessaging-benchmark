@@ -18,14 +18,13 @@ driverClass: io.openmessaging.benchmark.driver.kafka.KafkaBenchmarkDriver
 
 # Kafka client-specific configuration
 replicationFactor: 3
+reset: true
 
 topicConfig: |
   min.insync.replicas=2
 
 commonConfig: |
   bootstrap.servers=localhost:9092
-  default.api.timeout.ms=1200000
-  request.timeout.ms=1200000
 
 producerConfig: |
   acks=all

@@ -13,14 +13,13 @@
  */
 package io.openmessaging.benchmark.driver.rocketmq;
 
-
 import io.openmessaging.benchmark.driver.BenchmarkConsumer;
-import org.apache.rocketmq.client.consumer.MQPushConsumer;
+import org.apache.rocketmq.client.consumer.DefaultMQPushConsumer;
 
 public class RocketMQBenchmarkConsumer implements BenchmarkConsumer {
-    private final MQPushConsumer rmqConsumer;
+    private final DefaultMQPushConsumer rmqConsumer;
 
-    public RocketMQBenchmarkConsumer(final MQPushConsumer rmqConsumer) {
+    public RocketMQBenchmarkConsumer(final DefaultMQPushConsumer rmqConsumer) {
         this.rmqConsumer = rmqConsumer;
     }
 

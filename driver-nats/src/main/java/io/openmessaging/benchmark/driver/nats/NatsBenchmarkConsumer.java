@@ -13,10 +13,15 @@
  */
 package io.openmessaging.benchmark.driver.nats;
 
-
+import io.nats.client.Connection;
 import io.openmessaging.benchmark.driver.BenchmarkConsumer;
 
 public class NatsBenchmarkConsumer implements BenchmarkConsumer {
-    @Override
-    public void close() {}
+    private Connection cn;
+    public NatsBenchmarkConsumer (Connection cn) {
+        this.cn = cn;
+    }
+    @Override public void close() throws Exception {
+        this.cn.close();
+    }
 }

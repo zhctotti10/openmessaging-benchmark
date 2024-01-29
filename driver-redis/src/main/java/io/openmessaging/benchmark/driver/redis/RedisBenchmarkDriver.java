@@ -13,7 +13,6 @@
  */
 package io.openmessaging.benchmark.driver.redis;
 
-
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
@@ -22,26 +21,25 @@ import io.openmessaging.benchmark.driver.BenchmarkConsumer;
 import io.openmessaging.benchmark.driver.BenchmarkDriver;
 import io.openmessaging.benchmark.driver.BenchmarkProducer;
 import io.openmessaging.benchmark.driver.ConsumerCallback;
-import io.openmessaging.benchmark.driver.redis.client.RedisClientConfig;
 import java.io.File;
 import java.io.IOException;
 import java.util.Random;
 import java.util.concurrent.CompletableFuture;
 import org.apache.bookkeeper.stats.StatsLogger;
-import org.apache.commons.pool2.impl.GenericObjectPoolConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import redis.clients.jedis.Jedis;
-import redis.clients.jedis.JedisPool;
+import redis.clients.jedis.*;
+import io.openmessaging.benchmark.driver.redis.client.RedisClientConfig;
+
 
 public class RedisBenchmarkDriver implements BenchmarkDriver {
     JedisPool jedisPool;
     private RedisClientConfig clientConfig;
 
     @Override
-    public void initialize(final File configurationFile, final StatsLogger statsLogger)
-            throws IOException {
+    public void initialize(final File configurationFile, final StatsLogger statsLogger) throws IOException {
         this.clientConfig = readConfig(configurationFile);
+
     }
 
     @Override
@@ -51,7 +49,8 @@ public class RedisBenchmarkDriver implements BenchmarkDriver {
 
     @Override
     public CompletableFuture<Void> createTopic(final String topic, final int partitions) {
-        return CompletableFuture.runAsync(() -> {});
+        return CompletableFuture.runAsync(() -> {
+        });
     }
 
     @Override
@@ -63,9 +62,9 @@ public class RedisBenchmarkDriver implements BenchmarkDriver {
     }
 
     @Override
-    public CompletableFuture<BenchmarkConsumer> createConsumer(
-            final String topic, final String subscriptionName, final ConsumerCallback consumerCallback) {
-        String consumerId = "consumer-" + getRandomString();
+    public CompletableFuture<BenchmarkConsumer> createConsumer(final String topic, final String subscriptionName,
+        final ConsumerCallback consumerCallback) {
+        String consumerId = "consumer-"+getRandomString();
         if (jedisPool == null) {
             setupJedisConn();
         }
@@ -74,37 +73,21 @@ public class RedisBenchmarkDriver implements BenchmarkDriver {
         } catch (Exception e) {
             log.info("Failed to create consumer instance.", e);
         }
-        return CompletableFuture.completedFuture(
-                new RedisBenchmarkConsumer(
-                        consumerId, topic, subscriptionName, jedisPool, consumerCallback));
+        return CompletableFuture.completedFuture(new RedisBenchmarkConsumer( consumerId, topic, subscriptionName,jedisPool, consumerCallback));
     }
 
     private void setupJedisConn() {
-        GenericObjectPoolConfig<Jedis> poolConfig = new GenericObjectPoolConfig<>();
+        JedisPoolConfig poolConfig = new JedisPoolConfig();
         poolConfig.setMaxTotal(this.clientConfig.jedisPoolMaxTotal);
         poolConfig.setMaxIdle(this.clientConfig.jedisPoolMaxIdle);
-        if (this.clientConfig.redisPass != null) {
-            if (this.clientConfig.redisUser != null) {
-                jedisPool =
-                        new JedisPool(
-                                poolConfig,
-                                this.clientConfig.redisHost,
-                                this.clientConfig.redisPort,
-                                2000,
-                                this.clientConfig.redisPass,
-                                this.clientConfig.redisUser);
+        if( this.clientConfig.redisPass != null ){
+            if ( this.clientConfig.redisUser != null){
+                jedisPool = new JedisPool(poolConfig, this.clientConfig.redisHost, this.clientConfig.redisPort, 2000, this.clientConfig.redisPass, this.clientConfig.redisUser);
             } else {
-                jedisPool =
-                        new JedisPool(
-                                poolConfig,
-                                this.clientConfig.redisHost,
-                                this.clientConfig.redisPort,
-                                2000,
-                                this.clientConfig.redisPass);
-            }
+            jedisPool = new JedisPool(poolConfig, this.clientConfig.redisHost, this.clientConfig.redisPort,2000, this.clientConfig.redisPass );
+        }
         } else {
-            jedisPool =
-                    new JedisPool(poolConfig, this.clientConfig.redisHost, this.clientConfig.redisPort, 2000);
+            jedisPool = new JedisPool(poolConfig, this.clientConfig.redisHost, this.clientConfig.redisPort,2000 );
         }
     }
 
@@ -115,9 +98,8 @@ public class RedisBenchmarkDriver implements BenchmarkDriver {
         }
     }
 
-    private static final ObjectMapper mapper =
-            new ObjectMapper(new YAMLFactory())
-                    .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+    private static final ObjectMapper mapper = new ObjectMapper(new YAMLFactory())
+            .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
     private static RedisClientConfig readConfig(File configurationFile) throws IOException {
         return mapper.readValue(configurationFile, RedisClientConfig.class);
@@ -125,7 +107,7 @@ public class RedisBenchmarkDriver implements BenchmarkDriver {
 
     private static final Random random = new Random();
 
-    private static String getRandomString() {
+    private static final String getRandomString() {
         byte[] buffer = new byte[5];
         random.nextBytes(buffer);
         return BaseEncoding.base64Url().omitPadding().encode(buffer);

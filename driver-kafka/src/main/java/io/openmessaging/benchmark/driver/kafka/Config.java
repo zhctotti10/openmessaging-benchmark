@@ -23,4 +23,6 @@ public class Config {
     public String producerConfig;
 
     public String consumerConfig;
+
+    public boolean reset;
 }

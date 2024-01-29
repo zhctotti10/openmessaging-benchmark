@@ -24,6 +24,7 @@ public class PulsarConfig {
     public int batchingMaxBytes = 128 * 1024;
     public int pendingQueueSize = 1000;
     public int maxPendingMessagesAcrossPartitions = 50000;
+    public int batchingPartitionSwitchFrequencyByPublishDelay = 10;
 
     // consumer configs
     public int maxTotalReceiverQueueSizeAcrossPartitions = 50000;

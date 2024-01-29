@@ -13,28 +13,23 @@
  */
 package io.openmessaging.benchmark.worker.commands;
 
-import static java.util.concurrent.TimeUnit.HOURS;
-import static java.util.concurrent.TimeUnit.SECONDS;
+import java.util.concurrent.TimeUnit;
 
 import org.HdrHistogram.Histogram;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
 public class CumulativeLatencies {
 
-    public Histogram publishLatency = new Histogram(SECONDS.toMicros(60), 5);
-    public Histogram publishDelayLatency = new Histogram(SECONDS.toMicros(60), 5);
-    public Histogram endToEndLatency = new Histogram(HOURS.toMicros(12), 5);
+    @JsonIgnore
+    public Histogram publishLatency = new Histogram(TimeUnit.SECONDS.toMicros(60), 5);
+    public byte[] publishLatencyBytes;
 
-    public CumulativeLatencies plus(CumulativeLatencies toAdd) {
-        CumulativeLatencies result = new CumulativeLatencies();
+    @JsonIgnore
+    public Histogram publishDelayLatency = new Histogram(TimeUnit.SECONDS.toMicros(60), 5);
+    public byte[] publishDelayLatencyBytes;
 
-        result.publishLatency.add(this.publishLatency);
-        result.publishDelayLatency.add(this.publishDelayLatency);
-        result.endToEndLatency.add(this.endToEndLatency);
-
-        result.publishLatency.add(toAdd.publishLatency);
-        result.publishDelayLatency.add(toAdd.publishDelayLatency);
-        result.endToEndLatency.add(toAdd.endToEndLatency);
-
-        return result;
-    }
+    @JsonIgnore
+    public Histogram endToEndLatency = new Histogram(TimeUnit.HOURS.toMicros(12), 5);
+    public byte[] endToEndLatencyBytes;
 }

@@ -13,7 +13,6 @@
  */
 package io.openmessaging.benchmark.driver.pulsar.config;
 
-
 import org.apache.pulsar.common.naming.TopicDomain;
 
 public class PulsarClientConfig {
@@ -27,9 +26,12 @@ public class PulsarClientConfig {
 
     public int connectionsPerBroker = 8;
 
-    public int maxConcurrentLookupRequests = 1000;
-
     public String namespacePrefix;
+
+    // user topic
+    public String topics;
+
+    public boolean useMyTopic;
 
     public String clusterName;
 

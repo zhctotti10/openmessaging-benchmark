@@ -1,0 +1,18 @@
+name: rocketmq-testcase
+
+topics: 0
+partitionsPerTopic: 10
+messageSize: 4096
+payloadFile: "date.file"
+subscriptionsPerTopic: 2
+consumerPerSubscription: 2
+producersPerTopic: 1
+useRandomizedPayloads: true
+randomBytesRatio: 1.0
+
+producerRate: 200
+
+consumerBacklogSizeGB: 0
+testDurationMinutes: 5
+
+randomizedPayloadPoolSize: 1

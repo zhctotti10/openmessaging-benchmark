@@ -13,156 +13,85 @@
  */
 package io.openmessaging.benchmark.driver.nats;
 
-
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
-import io.nats.client.Connection;
 import io.nats.client.Dispatcher;
-import io.nats.client.ErrorListener;
-import io.nats.client.JetStream;
-import io.nats.client.JetStreamManagement;
-import io.nats.client.JetStreamSubscription;
-import io.nats.client.Message;
 import io.nats.client.Nats;
 import io.nats.client.Options;
-import io.nats.client.PushSubscribeOptions;
-import io.nats.client.api.ConsumerConfiguration;
-import io.nats.client.api.StreamConfiguration;
-import io.nats.client.api.StreamInfo;
-import io.nats.client.support.JsonUtils;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import io.openmessaging.benchmark.driver.BenchmarkConsumer;
 import io.openmessaging.benchmark.driver.BenchmarkDriver;
 import io.openmessaging.benchmark.driver.BenchmarkProducer;
 import io.openmessaging.benchmark.driver.ConsumerCallback;
 import java.io.File;
 import java.io.IOException;
-import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 import org.apache.bookkeeper.stats.StatsLogger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import io.nats.client.Connection;
+
 
 public class NatsBenchmarkDriver implements BenchmarkDriver {
     private NatsConfig config;
-    private Connection connection;
-    private JetStream jetStream;
-    private JetStreamManagement jetStreamManagement;
-
-    @Override
-    public void initialize(File configurationFile, StatsLogger statsLogger)
-            throws IOException, InterruptedException {
+    @Override public void initialize(File configurationFile, StatsLogger statsLogger) throws IOException {
         config = mapper.readValue(configurationFile, NatsConfig.class);
         log.info("read config file," + config.toString());
-        this.connection =
-                Nats.connect(
-                        new Options.Builder()
-                                .server(config.natsHostUrl)
-                                .maxReconnects(5)
-                                .reconnectWait(Duration.ofSeconds(1))
-                                .connectionTimeout(Duration.ofSeconds(5))
-                                .pingInterval(Duration.ofSeconds(60))
-                                .errorListener(
-                                        new ErrorListener() {
-                                            @Override
-                                            public void errorOccurred(Connection conn, String error) {
-                                                log.error("Error on connection {}: {}", conn, error);
-                                            }
-
-                                            @Override
-                                            public void exceptionOccurred(Connection conn, Exception exp) {
-                                                log.error("Exception on connection {}", conn, exp);
-                                            }
-                                        })
-                                .build());
-        this.jetStream = connection.jetStream();
-        this.jetStreamManagement = connection.jetStreamManagement();
     }
 
-    @Override
-    public String getTopicNamePrefix() {
+    @Override public String getTopicNamePrefix() {
         return "Nats-benchmark";
     }
 
-    @Override
-    public CompletableFuture<Void> createTopic(String topic, int partitions) {
+    @Override public CompletableFuture<Void> createTopic(String topic, int partitions) {
+        log.info("nats create a topic" + topic);
+        log.info("ignore partitions");
+        CompletableFuture<Void> future = new CompletableFuture<>();
+        future.complete(null);
+        return future;
+    }
+
+    @Override public CompletableFuture<BenchmarkProducer> createProducer(String topic) {
+        Connection natsProducer;
         try {
-            JetStreamManagement jsm = connection.jetStreamManagement();
-            StreamInfo streamInfo =
-                    jsm.addStream(
-                            StreamConfiguration.builder()
-                                    .name(topic)
-                                    .subjects(topic)
-                                    .storageType(config.storageType)
-                                    .maxBytes(config.maxBytes)
-                                    .replicas(config.replicationFactor)
-                                    .build());
-            log.info("Created stream {} -- {}", topic, JsonUtils.getFormatted(streamInfo));
-            return CompletableFuture.completedFuture(null);
+            Options options = new Options.Builder().server(config.natsHostUrl).maxReconnects(5).build();
+            natsProducer = Nats.connect(options);
         } catch (Exception e) {
-            CompletableFuture<Void> f = new CompletableFuture<>();
-            f.completeExceptionally(e);
-            return f;
+            log.error("createProducer excetopin " + e);
+            return null;
         }
+        return CompletableFuture.completedFuture(new NatsBenchmarkProducer(natsProducer, topic));
     }
 
-    @Override
-    public CompletableFuture<BenchmarkProducer> createProducer(String topic) {
-        return CompletableFuture.completedFuture(new NatsBenchmarkProducer(jetStream, topic));
-    }
-
-    @Override
-    public CompletableFuture<BenchmarkConsumer> createConsumer(
-            String topic, String subscriptionName, ConsumerCallback consumerCallback) {
-
-        ConsumerConfiguration cc =
-                ConsumerConfiguration.builder()
-                        .durable("durable-" + subscriptionName)
-                        .deliverSubject("delivery-subject-" + subscriptionName)
-                        .deliverGroup("group-" + subscriptionName)
-                        .build();
-        PushSubscribeOptions pso = PushSubscribeOptions.builder().configuration(cc).build();
-
+    @Override public CompletableFuture<BenchmarkConsumer> createConsumer(String topic, String subscriptionName,
+        ConsumerCallback consumerCallback) {
+        Dispatcher natsConsumer;
+        Connection cn;
+        log.info("createConsumer");
         try {
-            jetStreamManagement.addOrUpdateConsumer(topic, cc);
-
-            Dispatcher dispatcher = connection.createDispatcher();
-
-            JetStreamSubscription sub =
-                    jetStream.subscribe(
-                            topic,
-                            dispatcher,
-                            (Message msg) -> {
-                                long publishTimestamp = readLongFromBytes(msg.getData());
-                                consumerCallback.messageReceived(msg.getData(), publishTimestamp);
-                                msg.ack();
-                            },
-                            false,
-                            pso);
-            return CompletableFuture.completedFuture(new NatsBenchmarkConsumer());
+            Options options = new Options.Builder().server(config.natsHostUrl).maxReconnects(5).build();
+            cn = Nats.connect(options);
+            natsConsumer = cn.createDispatcher((msg) -> {
+                consumerCallback.messageReceived(msg.getData(), Long.parseLong(msg.getReplyTo()));
+            });
+            natsConsumer.subscribe(topic, subscriptionName);
+            cn.flush(Duration.ZERO);
         } catch (Exception e) {
-            CompletableFuture<BenchmarkConsumer> f = new CompletableFuture<>();
-            f.completeExceptionally(e);
-            return f;
+            log.error("createConsumer excetopin " + e);
+            return null;
         }
+        log.info("createCOnsumer done");
+        return CompletableFuture.completedFuture(new NatsBenchmarkConsumer(cn));
     }
 
-    @Override
-    public void close() throws Exception {
-        this.connection.close();
+    @Override public void close() throws Exception {
+
     }
 
     private static final Logger log = LoggerFactory.getLogger(NatsBenchmarkDriver.class);
-    private static final ObjectMapper mapper =
-            new ObjectMapper(new YAMLFactory())
-                    .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+    private static final ObjectMapper mapper = new ObjectMapper(new YAMLFactory())
+        .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
-    private static long readLongFromBytes(final byte[] b) {
-        long result = 0;
-        for (int i = 0; i < 8; i++) {
-            result <<= 8;
-            result |= (b[i] & 0xFF);
-        }
-        return result;
-    }
 }

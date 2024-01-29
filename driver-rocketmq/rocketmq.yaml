@@ -16,18 +16,17 @@ name: RocketMQ
 driverClass: io.openmessaging.benchmark.driver.rocketmq.RocketMQBenchmarkDriver
 
 # RocketMQ client-specific configuration
-clusterName: DefaultCluster
-namesrvAddr: 127.0.0.1:9876
+clusterName: rocketmq-broker-gz-92f1ecf22606
+namesrvAddr: 30.174.57.9:9876
 vipChannelEnabled: false
-
-batchCQ: true
-autoBatch: true
-# batchMaxBytes: 32768
-# batchMaxDelayMs: 10
-# totalBatchMaxBytes: 33554432
-
-enableBackpressure: true
-backpressureConcurrency: 1024
-
-accessKey:
-secretKey:
+# 是否使用指定的Topic，否：则自动创建新的Topic，是：则需指定已创建好的topics
+useMyTopic: true
+topics: MQ_INST_rocketmqe5kon333n3jk_ns_1%ruqi_tp_1,MQ_INST_rocketmqe5kon333n3jk_ns_1%ruqi_tp_2,MQ_INST_rocketmqe5kon333n3jk_ns_1%ruqi_tp_3
+# 是否指定的命名空间，否：则自动创建命名空间，是：则需指定已创建好的customNamespace
+useCustomNamespace: true
+customNamespace: MQ_INST_rocketmqe5kon333n3jk_ns_1
+# 是否生产定时消息，否：生产普通消息，是：生产定时/延时消息且通过delayTimeInSec设置延迟时间
+sendDelayMsg: false
+delayTimeInSec: 60
+accessKey: eyJrZXlJZCI6InJvY2tldG1xLXhwbnB4N2JxZTM5IiwiYWxnIjoiSFMyNTYifQ.eyJzdWIiOiJyb2NrZXRtcS14cG5weDdicWUzOV9yb2xlX3N0YWJsZXRlc3QifQ.nKJJV-n6yICVZfKFGkDx8CFZrnFvXNE1i36iVINXGPM
+secretKey: eyJrZXlJZCI6InJvY2tldG1xLXhwbnB4N2JxZTM5IiwiYWxnIjoiSFMyNTYifQ.eyJzdWIiOiJyb2NrZXRtcS14cG5weDdicWUzOV9yb2xlX3N0YWJsZXRlc3QifQ.nKJJV-n6yICVZfKFGkDx8CFZrnFvXNE1i36iVINXGPM

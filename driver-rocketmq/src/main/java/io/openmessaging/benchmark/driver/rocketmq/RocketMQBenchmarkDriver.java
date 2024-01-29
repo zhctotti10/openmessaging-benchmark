@@ -13,11 +13,11 @@
  */
 package io.openmessaging.benchmark.driver.rocketmq;
 
-
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectWriter;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import com.google.common.base.Splitter;
 import com.google.common.io.BaseEncoding;
 import io.openmessaging.benchmark.driver.BenchmarkConsumer;
 import io.openmessaging.benchmark.driver.BenchmarkDriver;
@@ -26,11 +26,10 @@ import io.openmessaging.benchmark.driver.ConsumerCallback;
 import io.openmessaging.benchmark.driver.rocketmq.client.RocketMQClientConfig;
 import java.io.File;
 import java.io.IOException;
-import java.util.Map;
+import java.util.List;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
 import org.apache.bookkeeper.stats.StatsLogger;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.rocketmq.acl.common.AclClientRPCHook;
@@ -39,18 +38,12 @@ import org.apache.rocketmq.client.consumer.DefaultMQPushConsumer;
 import org.apache.rocketmq.client.consumer.listener.ConsumeConcurrentlyStatus;
 import org.apache.rocketmq.client.consumer.listener.MessageListenerConcurrently;
 import org.apache.rocketmq.client.consumer.rebalance.AllocateMessageQueueAveragely;
-import org.apache.rocketmq.client.exception.MQBrokerException;
 import org.apache.rocketmq.client.exception.MQClientException;
 import org.apache.rocketmq.client.producer.DefaultMQProducer;
-import org.apache.rocketmq.common.TopicAttributes;
 import org.apache.rocketmq.common.TopicConfig;
 import org.apache.rocketmq.common.message.MessageExt;
 import org.apache.rocketmq.remoting.RPCHook;
-import org.apache.rocketmq.remoting.exception.RemotingConnectException;
-import org.apache.rocketmq.remoting.exception.RemotingSendRequestException;
-import org.apache.rocketmq.remoting.exception.RemotingTimeoutException;
 import org.apache.rocketmq.tools.admin.DefaultMQAdminExt;
-import org.apache.rocketmq.tools.admin.MQAdminExt;
 import org.apache.rocketmq.tools.command.CommandUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -62,14 +55,10 @@ public class RocketMQBenchmarkDriver implements BenchmarkDriver {
     private RPCHook rpcHook;
 
     @Override
-    public void initialize(final File configurationFile, final StatsLogger statsLogger)
-            throws IOException {
+    public void initialize(final File configurationFile, final StatsLogger statsLogger) throws IOException {
         this.rmqClientConfig = readConfig(configurationFile);
         if (isAclEnabled()) {
-            rpcHook =
-                    new AclClientRPCHook(
-                            new SessionCredentials(
-                                    this.rmqClientConfig.accessKey, this.rmqClientConfig.secretKey));
+            rpcHook = new AclClientRPCHook(new SessionCredentials(this.rmqClientConfig.accessKey, this.rmqClientConfig.secretKey));
             this.rmqAdmin = new DefaultMQAdminExt(rpcHook);
         } else {
             this.rmqAdmin = new DefaultMQAdminExt();
@@ -81,6 +70,7 @@ public class RocketMQBenchmarkDriver implements BenchmarkDriver {
         } catch (MQClientException e) {
             log.error("Start the RocketMQ admin tool failed.");
         }
+
     }
 
     @Override
@@ -88,64 +78,28 @@ public class RocketMQBenchmarkDriver implements BenchmarkDriver {
         return "RocketMQ-Benchmark";
     }
 
-    Map<String, Set<String>> cachedBrokerAddr = new ConcurrentHashMap<>();
-
-    int fetchCnt = 0;
-
-    private synchronized Set<String> fetchMasterAndSlaveAddrByClusterName(
-            final MQAdminExt adminExt, final String clusterName)
-            throws RemotingConnectException, RemotingSendRequestException, RemotingTimeoutException,
-                    MQBrokerException, InterruptedException {
-        Set<String> brokerList = cachedBrokerAddr.get(clusterName);
-        if (brokerList == null) {
-            brokerList =
-                    CommandUtil.fetchMasterAndSlaveAddrByClusterName(
-                            adminExt, this.rmqClientConfig.clusterName);
-            cachedBrokerAddr.put(clusterName, brokerList);
-            if (brokerList.isEmpty()) {
-                throw new RuntimeException("get brokerAddr return null, clusterName: " + clusterName);
-            }
-        }
-        if (fetchCnt++ % 100 == 0) {
-            log.info("fetch brokerAddr count: " + fetchCnt);
-        }
-        return brokerList;
-    }
-
     @Override
     public CompletableFuture<Void> createTopic(final String topic, final int partitions) {
-        return CompletableFuture.runAsync(
-                () -> {
-                    TopicConfig topicConfig = new TopicConfig();
-                    topicConfig.setOrder(false);
-                    topicConfig.setPerm(6);
-                    topicConfig.setReadQueueNums(partitions);
-                    topicConfig.setWriteQueueNums(partitions);
-                    topicConfig.setTopicName(topic);
-                    if (Boolean.TRUE.equals(this.rmqClientConfig.batchCQ)) {
-                        topicConfig
-                                .getAttributes()
-                                .put("+" + TopicAttributes.QUEUE_TYPE_ATTRIBUTE.getName(), "BatchCQ");
-                    }
+        return CompletableFuture.runAsync(() -> {
+            TopicConfig topicConfig = new TopicConfig();
+            topicConfig.setOrder(false);
+            topicConfig.setPerm(6);
+            topicConfig.setReadQueueNums(partitions);
+            topicConfig.setWriteQueueNums(partitions);
+            topicConfig.setTopicName(topic);
 
-                    try {
-                        Set<String> brokerList =
-                                fetchMasterAndSlaveAddrByClusterName(
-                                        this.rmqAdmin, this.rmqClientConfig.clusterName);
-                        topicConfig.setReadQueueNums(Math.max(1, partitions / brokerList.size()));
-                        topicConfig.setWriteQueueNums(Math.max(1, partitions / brokerList.size()));
+            try {
+                Set<String> brokerList = CommandUtil.fetchMasterAddrByClusterName(this.rmqAdmin, this.rmqClientConfig.clusterName);
+                topicConfig.setReadQueueNums(Math.max(1, partitions / brokerList.size()));
+                topicConfig.setWriteQueueNums(Math.max(1, partitions / brokerList.size()));
 
-                        for (String brokerAddr : brokerList) {
-                            this.rmqAdmin.createAndUpdateTopicConfig(brokerAddr, topicConfig);
-                        }
-                    } catch (Exception e) {
-                        throw new RuntimeException(
-                                String.format(
-                                        "Failed to create topic [%s] to cluster [%s]",
-                                        topic, this.rmqClientConfig.clusterName),
-                                e);
-                    }
-                });
+                for (String brokerAddr : brokerList) {
+                    this.rmqAdmin.createAndUpdateTopicConfig(brokerAddr, topicConfig);
+                }
+            } catch (Exception e) {
+                throw new RuntimeException(String.format("Failed to create topic [%s] to cluster [%s]", topic, this.rmqClientConfig.clusterName), e);
+            }
+        });
     }
 
     @Override
@@ -167,26 +121,6 @@ public class RocketMQBenchmarkDriver implements BenchmarkDriver {
             if (null != this.rmqClientConfig.compressMsgBodyOverHowmuch) {
                 rmqProducer.setCompressMsgBodyOverHowmuch(this.rmqClientConfig.compressMsgBodyOverHowmuch);
             }
-
-            if (null != this.rmqClientConfig.autoBatch) {
-                rmqProducer.setAutoBatch(this.rmqClientConfig.autoBatch);
-            }
-            if (null != this.rmqClientConfig.batchMaxBytes) {
-                rmqProducer.batchMaxBytes(this.rmqClientConfig.batchMaxBytes);
-            }
-            if (null != this.rmqClientConfig.batchMaxDelayMs) {
-                rmqProducer.batchMaxDelayMs(this.rmqClientConfig.batchMaxDelayMs);
-            }
-            if (null != this.rmqClientConfig.totalBatchMaxBytes) {
-                rmqProducer.totalBatchMaxBytes(this.rmqClientConfig.totalBatchMaxBytes);
-            }
-            if (null != this.rmqClientConfig.enableBackpressure) {
-                rmqProducer.setEnableBackpressureForAsyncMode(this.rmqClientConfig.enableBackpressure);
-            }
-            if (null != this.rmqClientConfig.backpressureConcurrency) {
-                rmqProducer.setBackPressureForAsyncSendNum(this.rmqClientConfig.backpressureConcurrency);
-            }
-
             try {
                 rmqProducer.start();
             } catch (MQClientException e) {
@@ -194,34 +128,49 @@ public class RocketMQBenchmarkDriver implements BenchmarkDriver {
             }
         }
 
-        return CompletableFuture.completedFuture(new RocketMQBenchmarkProducer(rmqProducer, topic));
+        if(this.rmqClientConfig.sendDelayMsg){
+            return CompletableFuture.completedFuture(new RocketMQBenchmarkProducer(rmqProducer, topic, true,
+                    this.rmqClientConfig.delayTimeInSec));
+        } else {
+            return CompletableFuture.completedFuture(new RocketMQBenchmarkProducer(rmqProducer, topic));
+        }
     }
 
     @Override
-    public CompletableFuture<BenchmarkConsumer> createConsumer(
-            final String topic, final String subscriptionName, final ConsumerCallback consumerCallback) {
+    public CompletableFuture<BenchmarkConsumer> createConsumer(final String topic, final String subscriptionName,
+        final ConsumerCallback consumerCallback) {
         DefaultMQPushConsumer rmqConsumer;
-        if (isAclEnabled()) {
-            rmqConsumer =
-                    new DefaultMQPushConsumer(subscriptionName, rpcHook, new AllocateMessageQueueAveragely());
+
+        // To avoid bench-tool encounter subscription relationship conflict when specifying multiple topics, let's add topic name as subscription name prefix.
+        String subPrefix;
+        if(topic.contains("%")){
+            subPrefix = topic.split("%")[1];
         } else {
-            rmqConsumer = new DefaultMQPushConsumer(subscriptionName);
+            subPrefix = topic;
+        }
+        String fullSubName = String.format("%s_%s",subPrefix, subscriptionName);
+
+        if (isAclEnabled()) {
+            rmqConsumer = new DefaultMQPushConsumer(fullSubName, rpcHook, new AllocateMessageQueueAveragely());
+        } else {
+            rmqConsumer = new DefaultMQPushConsumer(fullSubName);
         }
         rmqConsumer.setNamesrvAddr(this.rmqClientConfig.namesrvAddr);
+        if(rmqClientConfig.useCustomNamespace){
+            rmqConsumer.setNamespace(rmqClientConfig.customNamespace);
+        }
         rmqConsumer.setInstanceName("ConsumerInstance" + getRandomString());
         if (null != this.rmqClientConfig.vipChannelEnabled) {
             rmqConsumer.setVipChannelEnabled(this.rmqClientConfig.vipChannelEnabled);
         }
         try {
             rmqConsumer.subscribe(topic, "*");
-            rmqConsumer.registerMessageListener(
-                    (MessageListenerConcurrently)
-                            (msgs, context) -> {
-                                for (MessageExt message : msgs) {
-                                    consumerCallback.messageReceived(message.getBody(), message.getBornTimestamp());
-                                }
-                                return ConsumeConcurrentlyStatus.CONSUME_SUCCESS;
-                            });
+            rmqConsumer.registerMessageListener((MessageListenerConcurrently) (msgs, context) -> {
+                for (MessageExt message : msgs) {
+                    consumerCallback.messageReceived(message.getBody(), message.getBornTimestamp());
+                }
+                return ConsumeConcurrentlyStatus.CONSUME_SUCCESS;
+            });
             rmqConsumer.start();
         } catch (MQClientException e) {
             log.error("Failed to create consumer instance.", e);
@@ -231,8 +180,8 @@ public class RocketMQBenchmarkDriver implements BenchmarkDriver {
     }
 
     public boolean isAclEnabled() {
-        return !(StringUtils.isAnyBlank(this.rmqClientConfig.accessKey, this.rmqClientConfig.secretKey)
-                || StringUtils.isAnyEmpty(this.rmqClientConfig.accessKey, this.rmqClientConfig.secretKey));
+        return !(StringUtils.isAnyBlank(this.rmqClientConfig.accessKey, this.rmqClientConfig.secretKey) ||
+            StringUtils.isAnyEmpty(this.rmqClientConfig.accessKey, this.rmqClientConfig.secretKey));
     }
 
     @Override
@@ -243,9 +192,19 @@ public class RocketMQBenchmarkDriver implements BenchmarkDriver {
         this.rmqAdmin.shutdown();
     }
 
-    private static final ObjectMapper mapper =
-            new ObjectMapper(new YAMLFactory())
-                    .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+    @Override
+    public boolean useMyTopic() {
+        return rmqClientConfig.useMyTopic;
+    }
+
+    @Override
+    public List<String> myTopic() {
+        String originalTopic = rmqClientConfig.topics;
+        return Splitter.on(",").splitToList(originalTopic);
+    }
+
+    private static final ObjectMapper mapper = new ObjectMapper(new YAMLFactory())
+        .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
     private static RocketMQClientConfig readConfig(File configurationFile) throws IOException {
         return mapper.readValue(configurationFile, RocketMQClientConfig.class);
@@ -253,7 +212,7 @@ public class RocketMQBenchmarkDriver implements BenchmarkDriver {
 
     private static final Random random = new Random();
 
-    private static String getRandomString() {
+    private static final String getRandomString() {
         byte[] buffer = new byte[5];
         random.nextBytes(buffer);
         return BaseEncoding.base64Url().omitPadding().encode(buffer);

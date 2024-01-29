@@ -13,15 +13,16 @@
  */
 package io.openmessaging.benchmark.driver.rabbitmq;
 
+import com.rabbitmq.client.AlreadyClosedException;
+import java.io.IOException;
 
 import com.rabbitmq.client.AMQP.BasicProperties;
-import com.rabbitmq.client.AlreadyClosedException;
 import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.DefaultConsumer;
 import com.rabbitmq.client.Envelope;
+
 import io.openmessaging.benchmark.driver.BenchmarkConsumer;
 import io.openmessaging.benchmark.driver.ConsumerCallback;
-import java.io.IOException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -32,8 +33,7 @@ public class RabbitMqBenchmarkConsumer extends DefaultConsumer implements Benchm
     private final Channel channel;
     private final ConsumerCallback callback;
 
-    public RabbitMqBenchmarkConsumer(Channel channel, String queueName, ConsumerCallback callback)
-            throws IOException {
+    public RabbitMqBenchmarkConsumer(Channel channel, String queueName, ConsumerCallback callback) throws IOException {
         super(channel);
 
         this.channel = channel;
@@ -42,8 +42,7 @@ public class RabbitMqBenchmarkConsumer extends DefaultConsumer implements Benchm
     }
 
     @Override
-    public void handleDelivery(
-            String consumerTag, Envelope envelope, BasicProperties properties, byte[] body) {
+    public void handleDelivery(String consumerTag, Envelope envelope, BasicProperties properties, byte[] body) {
         callback.messageReceived(body, properties.getTimestamp().getTime());
     }
 
@@ -55,4 +54,5 @@ public class RabbitMqBenchmarkConsumer extends DefaultConsumer implements Benchm
             log.warn("Channel already closed", e);
         }
     }
+
 }

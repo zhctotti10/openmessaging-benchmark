@@ -13,7 +13,6 @@
  */
 package io.openmessaging.benchmark;
 
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -29,7 +28,6 @@ public class TestResult {
     public int consumersPerTopic;
 
     public List<Double> publishRate = new ArrayList<>();
-    public List<Double> publishErrorRate = new ArrayList<>();
     public List<Double> consumeRate = new ArrayList<>();
     public List<Long> backlog = new ArrayList<>();
 

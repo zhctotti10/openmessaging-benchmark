@@ -13,33 +13,17 @@
  */
 package io.openmessaging.benchmark.utils;
 
-
 import java.util.concurrent.TimeUnit;
-import java.util.function.Supplier;
 
 public class Timer {
     private final long startTime;
-    private final Supplier<Long> nanoClock;
-
-    Timer(Supplier<Long> nanoClock) {
-        this.nanoClock = nanoClock;
-        startTime = this.nanoClock.get();
-    }
 
     public Timer() {
-        this(System::nanoTime);
+        startTime = System.nanoTime();
     }
 
     public double elapsedMillis() {
-        return elapsed(TimeUnit.MILLISECONDS);
-    }
-
-    public double elapsedSeconds() {
-        return elapsed(TimeUnit.SECONDS);
-    }
-
-    private double elapsed(TimeUnit unit) {
-        long now = nanoClock.get();
-        return (now - startTime) / (double) unit.toNanos(1);
+        long now = System.nanoTime();
+        return (now - startTime) / (double) TimeUnit.MILLISECONDS.toNanos(1);
     }
 }

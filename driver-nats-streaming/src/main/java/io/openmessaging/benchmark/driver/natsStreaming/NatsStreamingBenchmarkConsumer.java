@@ -13,22 +13,25 @@
  */
 package io.openmessaging.benchmark.driver.natsStreaming;
 
-
 import io.nats.streaming.StreamingConnection;
+import io.nats.streaming.Subscription;
 import io.openmessaging.benchmark.driver.BenchmarkConsumer;
 
 public class NatsStreamingBenchmarkConsumer implements BenchmarkConsumer {
     private StreamingConnection streamingConnection;
+    private Subscription sub;
+    private String topic;
     private boolean unsubscribe;
-
-    public NatsStreamingBenchmarkConsumer(StreamingConnection streamingConnection) {
+    public NatsStreamingBenchmarkConsumer(StreamingConnection streamingConnection, Subscription sub, String topic) {
+        this.sub = sub;
+        this.topic = topic;
         this.unsubscribe = false;
         this.streamingConnection = streamingConnection;
     }
 
-    @Override
-    public void close() throws Exception {
+    @Override public void close() throws Exception {
         if (!unsubscribe) {
+//            sub.unsubscribe();
             unsubscribe = true;
             streamingConnection.close();
         }

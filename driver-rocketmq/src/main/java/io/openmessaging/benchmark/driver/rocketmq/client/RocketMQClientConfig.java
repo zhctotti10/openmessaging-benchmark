@@ -19,14 +19,12 @@ public class RocketMQClientConfig {
     public Boolean vipChannelEnabled;
     public Integer maxMessageSize;
     public Integer compressMsgBodyOverHowmuch;
-    public Boolean batchCQ;
-    public Boolean autoBatch;
-    public Integer batchMaxBytes;
-    public Integer batchMaxDelayMs;
-    public Integer totalBatchMaxBytes;
-
-    public Boolean enableBackpressure;
-    public Integer backpressureConcurrency;
     public String accessKey;
     public String secretKey;
+    public boolean useMyTopic;
+    public String topics;
+    public boolean useCustomNamespace;
+    public String customNamespace;
+    public boolean sendDelayMsg;
+    public Long delayTimeInSec;
 }

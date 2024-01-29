@@ -13,21 +13,21 @@
  */
 package io.openmessaging.benchmark.driver.pravega;
 
-
-import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.openmessaging.benchmark.driver.BenchmarkProducer;
 import io.pravega.client.EventStreamClientFactory;
 import io.pravega.client.stream.EventWriterConfig;
+import io.pravega.client.stream.impl.ByteBufferSerializer;
 import io.pravega.client.stream.Transaction;
 import io.pravega.client.stream.TransactionalEventStreamWriter;
 import io.pravega.client.stream.TxnFailedException;
-import io.pravega.client.stream.impl.ByteBufferSerializer;
-import java.nio.ByteBuffer;
-import java.util.Optional;
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import com.google.errorprone.annotations.concurrent.GuardedBy;
+
+import java.nio.ByteBuffer;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.UUID;
 
 public class PravegaBenchmarkTransactionProducer implements BenchmarkProducer {
     private static final Logger log = LoggerFactory.getLogger(PravegaBenchmarkProducer.class);
@@ -39,26 +39,18 @@ public class PravegaBenchmarkTransactionProducer implements BenchmarkProducer {
     // If null, a transaction has not been started.
     @GuardedBy("this")
     private Transaction<ByteBuffer> transaction;
-
     private final int eventsPerTransaction;
     private int eventCount = 0;
     private ByteBuffer timestampAndPayload;
 
-    public PravegaBenchmarkTransactionProducer(
-            String streamName,
-            EventStreamClientFactory clientFactory,
-            boolean includeTimestampInEvent,
-            boolean enableConnectionPooling,
-            int eventsPerTransaction) {
+    public PravegaBenchmarkTransactionProducer(String streamName, EventStreamClientFactory clientFactory,
+            boolean includeTimestampInEvent, boolean enableConnectionPooling, int eventsPerTransaction) {
         log.info("PravegaBenchmarkProducer: BEGIN: streamName={}", streamName);
 
         final String writerId = UUID.randomUUID().toString();
-        transactionWriter =
-                clientFactory.createTransactionalEventWriter(
-                        writerId,
-                        streamName,
-                        new ByteBufferSerializer(),
-                        EventWriterConfig.builder().enableConnectionPooling(enableConnectionPooling).build());
+        transactionWriter = clientFactory.createTransactionalEventWriter(writerId, streamName,
+                new ByteBufferSerializer(),
+                EventWriterConfig.builder().enableConnectionPooling(enableConnectionPooling).build());
         this.eventsPerTransaction = eventsPerTransaction;
         this.includeTimestampInEvent = includeTimestampInEvent;
     }
@@ -69,16 +61,14 @@ public class PravegaBenchmarkTransactionProducer implements BenchmarkProducer {
             if (transaction == null) {
                 transaction = transactionWriter.beginTxn();
             }
-            if (this.probeRequested(
-                    key)) { // Populate probe transaction with the sufficient amount of events.
+            if (this.probeRequested(key)) { // Populate probe transaction with the sufficient amount of events.
                 while (eventCount < this.eventsPerTransaction) {
                     transaction.writeEvent(key.get(), ByteBuffer.wrap(payload));
                     eventCount++;
                 }
             }
             if (includeTimestampInEvent) {
-                if (timestampAndPayload == null
-                        || timestampAndPayload.limit() != Long.BYTES + payload.length) {
+                if (timestampAndPayload == null || timestampAndPayload.limit() != Long.BYTES + payload.length) {
                     timestampAndPayload = ByteBuffer.allocate(Long.BYTES + payload.length);
                 } else {
                     timestampAndPayload.position(0);
@@ -119,13 +109,11 @@ public class PravegaBenchmarkTransactionProducer implements BenchmarkProducer {
         transactionWriter.close();
     }
 
-    /**
-     * Indicates if producer probe had been requested by OpenMessaging benchmark.
-     *
+    /** Indicates if producer probe had been requested by OpenMessaging benchmark.
      * @param key - key provided to the probe.
      * @return true in case requested event had been created in context of producer probe.
      */
-    private boolean probeRequested(Optional<String> key) {
+    private final boolean probeRequested(Optional<String> key) {
         // For the expected key, see: LocalWorker.probeProducers()
         final String expectedKey = "key";
         return key.isPresent() && key.get().equals(expectedKey);

@@ -13,19 +13,11 @@
  */
 package io.openmessaging.benchmark.driver.artemis;
 
-
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.ObjectWriter;
-import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
-import io.openmessaging.benchmark.driver.BenchmarkConsumer;
-import io.openmessaging.benchmark.driver.BenchmarkDriver;
-import io.openmessaging.benchmark.driver.BenchmarkProducer;
-import io.openmessaging.benchmark.driver.ConsumerCallback;
 import java.io.File;
 import java.io.IOException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ForkJoinPool;
+
 import org.apache.activemq.artemis.api.core.ActiveMQException;
 import org.apache.activemq.artemis.api.core.RoutingType;
 import org.apache.activemq.artemis.api.core.SimpleString;
@@ -36,6 +28,16 @@ import org.apache.activemq.artemis.api.core.client.ServerLocator;
 import org.apache.bookkeeper.stats.StatsLogger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ObjectWriter;
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+
+import io.openmessaging.benchmark.driver.BenchmarkConsumer;
+import io.openmessaging.benchmark.driver.BenchmarkDriver;
+import io.openmessaging.benchmark.driver.BenchmarkProducer;
+import io.openmessaging.benchmark.driver.ConsumerCallback;
 
 public class ArtemisBenchmarkDriver implements BenchmarkDriver {
     private ArtemisConfig config;
@@ -49,15 +51,8 @@ public class ArtemisBenchmarkDriver implements BenchmarkDriver {
         log.info("ActiveMQ Artemis driver configuration: {}", writer.writeValueAsString(config));
         try {
             ServerLocator serverLocator = ActiveMQClient.createServerLocator(config.brokerAddress);
-            // confirmation window size is in bytes, set to 1MB
-            serverLocator.setConfirmationWindowSize(1024 * 1024);
-            // use asynchronous sending of messages where SendAcknowledgementHandler reports
-            // success/failure
-            serverLocator.setBlockOnDurableSend(false);
-            serverLocator.setBlockOnNonDurableSend(false);
-            // use async acknowledgement
-            serverLocator.setBlockOnAcknowledge(false);
-
+            serverLocator.setConfirmationWindowSize(1000);
+            
             sessionFactory = serverLocator.createSessionFactory();
             session = sessionFactory.createSession();
         } catch (Exception e) {
@@ -74,22 +69,18 @@ public class ArtemisBenchmarkDriver implements BenchmarkDriver {
     public CompletableFuture<Void> createTopic(String topic, int partitions) {
         CompletableFuture<Void> future = new CompletableFuture<>();
         if (partitions != 1) {
-            future.completeExceptionally(
-                    new IllegalArgumentException("Partitions are not supported in Artemis"));
+            future.completeExceptionally(new IllegalArgumentException("Partitions are not supported in Artemis"));
             return future;
         }
 
-        ForkJoinPool.commonPool()
-                .submit(
-                        () -> {
-                            try {
-                                session.createAddress(
-                                        SimpleString.toSimpleString(topic), RoutingType.MULTICAST, true);
-                                future.complete(null);
-                            } catch (ActiveMQException e) {
-                                future.completeExceptionally(e);
-                            }
-                        });
+        ForkJoinPool.commonPool().submit(() -> {
+            try {
+                session.createAddress(SimpleString.toSimpleString(topic), RoutingType.MULTICAST, true);
+                future.complete(null);
+            } catch (ActiveMQException e) {
+                future.completeExceptionally(e);
+            }
+        });
 
         return future;
     }
@@ -106,22 +97,19 @@ public class ArtemisBenchmarkDriver implements BenchmarkDriver {
     }
 
     @Override
-    public CompletableFuture<BenchmarkConsumer> createConsumer(
-            String topic, String subscriptionName, ConsumerCallback consumerCallback) {
+    public CompletableFuture<BenchmarkConsumer> createConsumer(String topic, String subscriptionName,
+            ConsumerCallback consumerCallback) {
         CompletableFuture<BenchmarkConsumer> future = new CompletableFuture<>();
-        ForkJoinPool.commonPool()
-                .submit(
-                        () -> {
-                            try {
-                                String queueName = topic + "-" + subscriptionName;
-                                BenchmarkConsumer consumer =
-                                        new ArtemisBenchmarkConsumer(
-                                                topic, queueName, sessionFactory, consumerCallback);
-                                future.complete(consumer);
-                            } catch (ActiveMQException e) {
-                                future.completeExceptionally(e);
-                            }
-                        });
+        ForkJoinPool.commonPool().submit(() -> {
+            try {
+                String queueName = topic + "-" + subscriptionName;
+                BenchmarkConsumer consumer = new ArtemisBenchmarkConsumer(topic, queueName, sessionFactory,
+                        consumerCallback);
+                future.complete(consumer);
+            } catch (ActiveMQException e) {
+                future.completeExceptionally(e);
+            }
+        });
 
         return future;
     }
@@ -141,9 +129,8 @@ public class ArtemisBenchmarkDriver implements BenchmarkDriver {
         log.info("ActiveMQ Artemis benchmark driver successfully shut down");
     }
 
-    private static final ObjectMapper mapper =
-            new ObjectMapper(new YAMLFactory())
-                    .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+    private static final ObjectMapper mapper = new ObjectMapper(new YAMLFactory())
+            .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
     private static ArtemisConfig readConfig(File configurationFile) throws IOException {
         return mapper.readValue(configurationFile, ArtemisConfig.class);
