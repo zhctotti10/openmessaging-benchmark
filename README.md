@@ -24,4 +24,6 @@ This repository houses user-friendly, cloud-ready benchmarking suites for the fo
 ## 编译
 ```shell
 mvn clean  -DskipTests package install -Dlicense.skip=true
+
+或者执行./compile.sh
 ```
